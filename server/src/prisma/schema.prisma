@@ -1,0 +1,63 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  password  String?
+  name      String?
+  role      String   @default("PATIENT")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  doctor     Doctor?     @relation("UserDoctor")
+  patient    Patient?    @relation("UserPatient")
+  appointments Appointment[]
+
+  @@map("users")
+}
+
+model Doctor {
+  id            Int      @id @default(autoincrement())
+  userId        Int      @unique
+  user          User     @relation("UserDoctor", fields: [userId], references: [id], onDelete: Cascade)
+  specialization String
+  experience    Int      // years
+  createdAt     DateTime @default(now())
+
+  appointments Appointment[]
+
+  @@map("doctors")
+}
+
+model Patient {
+  id          Int      @id @default(autoincrement())
+  userId      Int      @unique
+  user        User     @relation("UserPatient", fields: [userId], references: [id], onDelete: Cascade)
+  gender      String
+  createdAt   DateTime @default(now())
+
+  appointments Appointment[]
+
+  @@map("patients")
+}
+
+model Appointment {
+  id          Int      @id @default(autoincrement())
+  doctorId    Int
+  patientId   Int
+  date        DateTime
+  status      String   @default("SCHEDULED") // SCHEDULED, COMPLETED, CANCELLED
+  createdAt   DateTime @default(now())
+
+  doctor      Doctor   @relation(fields: [doctorId], references: [id])
+  patient     Patient  @relation(fields: [patientId], references: [id])
+
+  @@map("appointments")
+}
