@@ -8,6 +8,11 @@ import { GoogleAuthGuard } from './guards/google-auth.guard';
 export class AuthController {
   constructor(private authService: AuthService) {}
 
+  @Get('test')
+  test(@Request() req){
+    return "test working properly"
+  }
+
   @UseGuards(LocalAuthGuard)
   @Post('login')
   login(@Request() req) {

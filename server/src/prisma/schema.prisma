@@ -6,58 +6,76 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
-
 model User {
-  id        Int      @id @default(autoincrement())
-  email     String   @unique
-  password  String?
-  name      String?
-  role      String   @default("PATIENT")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          Int       @id @default(autoincrement())
+  email       String    @unique
+  password    String?
+  name        String?
+  role        String    @default("PATIENT")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
-  doctor     Doctor?     @relation("UserDoctor")
-  patient    Patient?    @relation("UserPatient")
-  appointments Appointment[]
+  doctor      Doctor?   @relation("UserDoctor")
+  patient     Patient?  @relation("UserPatient")
 
   @@map("users")
 }
 
-model Doctor {
-  id            Int      @id @default(autoincrement())
-  userId        Int      @unique
-  user          User     @relation("UserDoctor", fields: [userId], references: [id], onDelete: Cascade)
-  specialization String
-  experience    Int      // years
-  createdAt     DateTime @default(now())
-
-  appointments Appointment[]
-
-  @@map("doctors")
-}
-
 model Patient {
-  id          Int      @id @default(autoincrement())
-  userId      Int      @unique
-  user        User     @relation("UserPatient", fields: [userId], references: [id], onDelete: Cascade)
-  gender      String
-  createdAt   DateTime @default(now())
-
-  appointments Appointment[]
+  id          Int       @id @default(autoincrement())
+  userId      Int       @unique
+  user        User      @relation("UserPatient", fields: [userId], references: [id])
+  gender      String?
+  
+  appointments Appointment[] @relation("PatientAppointments")
 
   @@map("patients")
 }
 
-model Appointment {
-  id          Int      @id @default(autoincrement())
-  doctorId    Int
-  patientId   Int
-  date        DateTime
-  status      String   @default("SCHEDULED") // SCHEDULED, COMPLETED, CANCELLED
-  createdAt   DateTime @default(now())
+model Doctor {
+  id              Int       @id @default(autoincrement())
+  userId          Int       @unique
+  user            User      @relation("UserDoctor", fields: [userId], references: [id])
+  specialization  String
+  experienceYears Int
+  ratings         Float     @default(0)
+  totalReviews    Int       @default(0)
+  isAvailable     Boolean   @default(true)
+  
+  slots           Slot[]
+  appointments    Appointment[]
 
-  doctor      Doctor   @relation(fields: [doctorId], references: [id])
-  patient     Patient  @relation(fields: [patientId], references: [id])
+  @@map("doctors")
+}
+
+model Slot {
+  id          Int       @id @default(autoincrement())
+  doctorId    Int
+  doctor      Doctor    @relation(fields: [doctorId], references: [id])
+  dayOfWeek   String
+  startTime   String
+  endTime     String
+  maxBookings Int       @default(10)
+  bookings    Int       @default(0)
+  
+  appointments Appointment[]
+
+  @@map("slots")
+}
+
+model Appointment {
+  id        Int      @id @default(autoincrement())
+  patientId Int
+  doctorId  Int
+  slotId    Int?
+  date      DateTime
+  status    String   @default("CONFIRMED")
+  notes     String?
+
+  patient   Patient  @relation("PatientAppointments", fields: [patientId], references: [id])
+  doctor    Doctor   @relation(fields: [doctorId], references: [id])
+  slot      Slot?    @relation(fields: [slotId], references: [id])
 
   @@map("appointments")
 }
+

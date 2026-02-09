@@ -1,19 +1,33 @@
-import { IsEmail, IsString, IsOptional, MinLength, IsEnum } from 'class-validator';
+// dto/create-user.dto.ts
+import { IsEmail, IsString, IsOptional, IsInt, IsEnum } from 'class-validator';
 
 export class CreateUserDto {
   @IsEmail()
   email: string;
 
-  @IsOptional()
   @IsString()
-  @MinLength(8)
+  @IsOptional()
   password?: string;
 
-  @IsOptional()
   @IsString()
+  @IsOptional()
   name?: string;
 
+  @IsString()
+  @IsOptional() 
+  role?: 'PATIENT' | 'DOCTOR';
+
+  // for doctores
+  @IsString()
   @IsOptional()
-  @IsEnum(['PATIENT', 'DOCTOR', 'ADMIN'])
-  role?: 'PATIENT' | 'DOCTOR' | 'ADMIN';
+  specialization?: string;
+
+  @IsInt()
+  @IsOptional()
+  experienceYears?: number;
+
+  // for patients
+  @IsString()
+  @IsOptional()
+  gender?: string;
 }
