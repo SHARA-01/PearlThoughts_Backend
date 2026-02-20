@@ -1,31 +1,27 @@
-import { Controller, Get, Post, Body, Param, ParseIntPipe, Query,  } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, ParseIntPipe, Query, } from '@nestjs/common';
 import { UsersService } from './users.service';
-import { CreateUserDto } from './dto/create-user.dto';
-import { PrismaService } from '../prisma/prisma.service';
+import { DoctorService } from './doctor/doctor.service';
 
 @Controller('users')
 export class UsersController {
-  constructor(private readonly usersService: UsersService, private readonly prisma: PrismaService) {}
+  constructor(private readonly usersService: UsersService, private readonly doctorService: DoctorService) { }
 
   @Get()
   findAll() {
     return this.usersService.findAll();
   }
 
+  @Get(':id/availability')
+  async getAvailability(
+    @Param('id', ParseIntPipe) doctorId: number,
+    @Query('date') date: string // Format: YYYY-MM-DD
+  ) {
+    return this.doctorService.getDoctorAvailability(doctorId, date);
+  }
+
   @Get("doctors")
-  async findAllDoctors(@Query('specialization') specialization?: string) {
-    console.log("Finding doctors with specialization:", specialization);
-    return this.prisma.doctor.findMany({
-      where: {
-        specialization: specialization ? { contains: specialization, mode: 'insensitive' } : undefined,
-        isAvailable: true,
-      },
-      include: {
-        user: {
-          select: { name: true, email: true }
-        }
-      }
-    });
+  findAllDoctors(@Query('specialization') specialization?: string) {
+    return this.doctorService.findAllDoctors(specialization);
   }
 
   @Get(':id')

@@ -2,15 +2,18 @@ import { IsInt, IsDateString, IsOptional, IsString } from 'class-validator';
 
 export class CreateAppointmentDto {
   @IsInt()
-  doctorId: number; 
+  doctorId: number;
 
   @IsInt()
-  slotId: number; 
+  timeId: number;
 
   @IsDateString()
-  date: string;  
+  date: string;
+
+  @IsString()
+  time: string;
 
   @IsString()
   @IsOptional()
-  notes?: string; 
+  notes?: string;
 }

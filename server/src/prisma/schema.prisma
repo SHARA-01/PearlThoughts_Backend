@@ -6,6 +6,7 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
 model User {
   id          Int       @id @default(autoincrement())
   email       String    @unique
@@ -14,10 +15,8 @@ model User {
   role        String    @default("PATIENT")
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
-
   doctor      Doctor?   @relation("UserDoctor")
   patient     Patient?  @relation("UserPatient")
-
   @@map("users")
 }
 
@@ -26,9 +25,7 @@ model Patient {
   userId      Int       @unique
   user        User      @relation("UserPatient", fields: [userId], references: [id])
   gender      String?
-  
   appointments Appointment[] @relation("PatientAppointments")
-
   @@map("patients")
 }
 
@@ -41,41 +38,47 @@ model Doctor {
   ratings         Float     @default(0)
   totalReviews    Int       @default(0)
   isAvailable     Boolean   @default(true)
-  
   slots           Slot[]
   appointments    Appointment[]
 
   @@map("doctors")
 }
 
-model Slot {
-  id          Int       @id @default(autoincrement())
-  doctorId    Int
-  doctor      Doctor    @relation(fields: [doctorId], references: [id])
-  dayOfWeek   String
-  startTime   String
-  endTime     String
-  maxBookings Int       @default(10)
-  bookings    Int       @default(0)
-  
-  appointments Appointment[]
 
-  @@map("slots")
+model Slot {
+  id          Int      @id @default(autoincrement())
+  doctorId    Int
+  doctor      Doctor   @relation(fields: [doctorId], references: [id])
+  dayOfWeek   String   // "MONDAY"
+  startTime   String   // "09:00"
+  endTime     String   // "12:00"
+  maxBookings Int       @default(5)
+  times       Time[]   
+}
+
+model Time {
+  id          Int      @id @default(autoincrement())
+  time        String   // "09:00", "09:30"
+  isBooked    Boolean  @default(false) 
+  slotId      Int
+  slot        Slot     @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  appointment Appointment[]
 }
 
 model Appointment {
-  id        Int      @id @default(autoincrement())
-  patientId Int
-  doctorId  Int
-  slotId    Int?
-  date      DateTime
-  status    String   @default("CONFIRMED")
-  notes     String?
+  id          Int      @id @default(autoincrement())
+  timeId      Int?      
+  time        Time?    @relation(fields: [timeId], references: [id], onDelete: SetNull)
+  patientId   Int
+  patient     Patient  @relation("PatientAppointments", fields: [patientId], references: [id])
+  doctorId    Int
+  doctor      Doctor   @relation(fields: [doctorId], references: [id])
+  date        DateTime 
+  reportingTime DateTime
+  notes       String?
+  status      String   @default("CONFIRMED") // "CONFIRMED", "CANCELLED", "COMPLETED"
 
-  patient   Patient  @relation("PatientAppointments", fields: [patientId], references: [id])
-  doctor    Doctor   @relation(fields: [doctorId], references: [id])
-  slot      Slot?    @relation(fields: [slotId], references: [id])
-
-  @@map("appointments")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 

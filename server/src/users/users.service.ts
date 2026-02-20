@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import * as argon2 from 'argon2';
 import { Prisma } from 'src/generated/prisma/client';
+import { addMinutes, format, isBefore,  parse } from 'date-fns';
 
 @Injectable()
 export class UsersService {
@@ -25,6 +26,7 @@ export class UsersService {
 
     // 3. Prepare the base User data
     const userRole = role || 'PATIENT';
+  
 
     // We define the input type strictly to allow dynamic field assignment
     const data: Prisma.UserCreateInput = {
@@ -96,4 +98,7 @@ export class UsersService {
   async signout(userId: number) {
     return { message: 'Signed out successfully' };
   }
+
+  // for doctors related logic
+ 
 }
