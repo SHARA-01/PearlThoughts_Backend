@@ -39,6 +39,6 @@ import { PassportModule } from '@nestjs/passport';
     GoogleStrategy,
   ],
   controllers: [AuthController],
-  exports: [AuthService, JwtModule, PassportModule],
+  exports: [AuthService],
 })
 export class AuthModule {}
