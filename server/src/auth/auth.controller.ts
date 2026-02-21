@@ -5,6 +5,7 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
 
 @Controller('auth')
+// @UseGuards(JwtAuthGuard)
 export class AuthController {
   constructor(private authService: AuthService) {}
 
