@@ -6,6 +6,7 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
 model User {
   id          Int       @id @default(autoincrement())
   email       String    @unique
@@ -14,34 +15,29 @@ model User {
   role        String    @default("PATIENT")
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
-
   doctor      Doctor?   @relation("UserDoctor")
   patient     Patient?  @relation("UserPatient")
-
   @@map("users")
 }
 
 model Patient {
-  id          Int       @id @default(autoincrement())
-  userId      Int       @unique
-  user        User      @relation("UserPatient", fields: [userId], references: [id])
-  gender      String?
-  
+  id           Int           @id @default(autoincrement())
+  userId       Int           @unique
+  user         User          @relation("UserPatient", fields: [userId], references: [id])
+  gender       String?
   appointments Appointment[] @relation("PatientAppointments")
-
   @@map("patients")
 }
 
 model Doctor {
-  id              Int       @id @default(autoincrement())
-  userId          Int       @unique
-  user            User      @relation("UserDoctor", fields: [userId], references: [id])
+  id              Int           @id @default(autoincrement())
+  userId          Int           @unique
+  user            User          @relation("UserDoctor", fields: [userId], references: [id])
   specialization  String
   experienceYears Int
-  ratings         Float     @default(0)
-  totalReviews    Int       @default(0)
-  isAvailable     Boolean   @default(true)
-  
+  ratings         Float         @default(0)
+  totalReviews    Int           @default(0)
+  isAvailable     Boolean       @default(true)
   slots           Slot[]
   appointments    Appointment[]
 
@@ -49,33 +45,42 @@ model Doctor {
 }
 
 model Slot {
-  id          Int       @id @default(autoincrement())
-  doctorId    Int
-  doctor      Doctor    @relation(fields: [doctorId], references: [id])
-  dayOfWeek   String
-  startTime   String
-  endTime     String
-  maxBookings Int       @default(10)
-  bookings    Int       @default(0)
-  
-  appointments Appointment[]
+  id             Int      @id @default(autoincrement())
+  doctorId       Int
+  doctor         Doctor   @relation(fields: [doctorId], references: [id])
+  dayOfWeek      String?  
+  date           String?  // e.g., "2026-10-31"
+  startTime      String   // "09:00"
+  endTime        String   // "12:00"
+  schedulingType String   @default("STREAM") // "STREAM" or "WAVE"
+  slotDuration   Int?     // e.g., 30 (Required for WAVE, ignored for STREAM)
+  maxBookings    Int      @default(1) // Capacity per chunk (Wave) or Total Capacity (Stream)
+  times          Time[]   
+}
 
-  @@map("slots")
+model Time {
+  id              Int           @id @default(autoincrement())
+  time            String        // "09:00" (Wave) or "09:00-11:00" (Stream)
+  isBooked        Boolean       @default(false) 
+  maxCapacity     Int           @default(1)
+  currentBookings Int           @default(0)
+  slotId          Int
+  slot            Slot          @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  appointment     Appointment[]
 }
 
 model Appointment {
-  id        Int      @id @default(autoincrement())
-  patientId Int
-  doctorId  Int
-  slotId    Int?
-  date      DateTime
-  status    String   @default("CONFIRMED")
-  notes     String?
-
-  patient   Patient  @relation("PatientAppointments", fields: [patientId], references: [id])
-  doctor    Doctor   @relation(fields: [doctorId], references: [id])
-  slot      Slot?    @relation(fields: [slotId], references: [id])
-
-  @@map("appointments")
+  id            Int      @id @default(autoincrement())
+  timeId        Int?      
+  time          Time?    @relation(fields: [timeId], references: [id], onDelete: SetNull)
+  patientId     Int
+  patient       Patient  @relation("PatientAppointments", fields: [patientId], references: [id])
+  doctorId      Int
+  doctor        Doctor   @relation(fields: [doctorId], references: [id])
+  date          DateTime 
+  reportingTime DateTime
+  notes         String?
+  status        String   @default("CONFIRMED") 
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
-

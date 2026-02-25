@@ -11,11 +11,11 @@ export class SlotsController {
 
   @Post()
   create(@Request() req, @Body() createSlotDto: CreateSlotDto) {
-    console.log('User from JWT:', req.user);
+    console.log('User from JWT:', req.user.userId);
     return this.slotsService.create(req.user.userId, createSlotDto);
   }
-
-  @Get('my-slots')
+  
+  @Get()
   findMySlots(@Request() req) {
     return this.slotsService.findMySlots(req.user.userId);
   }
