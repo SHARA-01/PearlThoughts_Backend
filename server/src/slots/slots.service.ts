@@ -2,77 +2,128 @@ import { Injectable, BadRequestException, NotFoundException, ConflictException }
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateSlotDto } from './dto/create-slot.dto';
 import { UpdateSlotDto } from './dto/update-slot.dto';
+import { addMinutes, format, parse } from 'date-fns';
 
 @Injectable()
 export class SlotsService {
   constructor(private prisma: PrismaService) {}
 
- 
   async create(userId: number, createSlotDto: CreateSlotDto) {
-    const { startTime, endTime, dayOfWeek } = createSlotDto;
+    const { 
+      startTime, endTime, dayOfWeek, date, 
+      schedulingType, maxBookings, slotDuration 
+    } = createSlotDto;
 
-    // Validate Time
+    // --- Validation ---
     if (startTime >= endTime) {
       throw new BadRequestException('Start time must be before end time');
     }
 
-    
+    if (!dayOfWeek && !date) {
+      throw new BadRequestException('You must provide either a dayOfWeek (recurring) or a date (override)');
+    }
+
+    if (schedulingType === 'WAVE' && !slotDuration) {
+      throw new BadRequestException('WAVE scheduling requires a slotDuration (e.g., 15 or 30 minutes)');
+    }
+
     const doctor = await this.prisma.doctor.findUnique({ where: { userId } });
     if (!doctor) throw new BadRequestException('User is not a doctor');
 
-    // C. Overlap Check 
+    // --- Overlap Check ---
+    // We check for overlap on the specific date OR the recurring day
     const overlappingSlot = await this.prisma.slot.findFirst({
       where: {
         doctorId: doctor.id,
-        dayOfWeek: dayOfWeek,
+        // Check if day matches OR specific date matches
         OR: [
-          { startTime: { lte: startTime }, endTime: { gt: startTime } },
-          { startTime: { lt: endTime }, endTime: { gte: endTime } },    
-          { startTime: { gte: startTime }, endTime: { lte: endTime } }  
+          { date: date || undefined }, 
+          { dayOfWeek: dayOfWeek || undefined } 
         ],
-      },
+        // AND time overlaps
+        AND: [
+          {
+            OR: [
+              { startTime: { lte: startTime }, endTime: { gt: startTime } },
+              { startTime: { lt: endTime }, endTime: { gte: endTime } },
+              { startTime: { gte: startTime }, endTime: { lte: endTime } }
+            ]
+          }
+        ]
+      }
     });
 
     if (overlappingSlot) {
-      throw new ConflictException(`Slot overlaps with an existing time on ${dayOfWeek}`);
+      throw new ConflictException(`Slot overlaps with an existing schedule on ${date || dayOfWeek}`);
     }
 
-   
+    // --- Time Chunk Generation ---
+    const timeIntervals = [];
+
+    if (schedulingType === 'STREAM') {
+      // 🟢 STREAM: Create ONE single time entity for the whole window.
+      // The capacity applies to the whole shift (First come, first serve).
+      timeIntervals.push({
+        time: `${startTime}-${endTime}`, // e.g., "09:00-11:00"
+        maxCapacity: maxBookings,        // e.g., 10
+        currentBookings: 0,
+        isBooked: false,
+      });
+    } 
+    else {
+      // 🌊 WAVE: Loop and create multiple chunks.
+      // The capacity applies per chunk.
+      let current = parse(startTime, 'HH:mm', new Date());
+      const end = parse(endTime, 'HH:mm', new Date());
+      const duration = slotDuration || 30; // Default to 30 if undefined, though validation catches this
+
+      while (current < end) {
+        timeIntervals.push({
+          time: format(current, 'HH:mm'), // e.g., "09:00", "09:30"
+          maxCapacity: maxBookings,       // e.g., 3 per chunk
+          currentBookings: 0,
+          isBooked: false,
+        });
+        current = addMinutes(current, duration);
+      }
+    }
+
+    // --- Save to Database ---
     return this.prisma.slot.create({
       data: {
-        ...createSlotDto,
         doctorId: doctor.id,
+        dayOfWeek,
+        date,
+        startTime,
+        endTime,
+        schedulingType: schedulingType || 'STREAM', // Default fallback
+        maxBookings, // Saved for reference
+        times: {
+          create: timeIntervals,
+        },
       },
+      include: { times: true }
     });
   }
 
-  // 2. GET MY SLOTS (Sorted)
   async findMySlots(userId: number) {
     const doctor = await this.prisma.doctor.findUnique({ where: { userId } });
     if (!doctor) throw new BadRequestException('User is not a doctor');
 
-    const slots = await this.prisma.slot.findMany({
+    return this.prisma.slot.findMany({
       where: { doctorId: doctor.id },
-    });
-
-    // Sort: Monday -> Sunday, then by Time
-    const dayOrder = {
-      'MONDAY': 1, 'TUESDAY': 2, 'WEDNESDAY': 3, 'THURSDAY': 4,
-      'FRIDAY': 5, 'SATURDAY': 6, 'SUNDAY': 7
-    };
-
-    return slots.sort((a, b) => {
-      const dayDiff = dayOrder[a.dayOfWeek] - dayOrder[b.dayOfWeek];
-      if (dayDiff !== 0) return dayDiff;
-      return a.startTime.localeCompare(b.startTime);
+      include: { times: true },
+      orderBy: [
+        { date: 'asc' },      
+        { dayOfWeek: 'asc' }, 
+        { startTime: 'asc' }
+      ]
     });
   }
 
-  // 3. UPDATE LIMIT (slots numbesrs)
   async updateSlotLimit(userId: number, slotId: number, updateSlotDto: UpdateSlotDto) {
     const doctor = await this.prisma.doctor.findUnique({ where: { userId } });
     
-    // Check ownership
     const slot = await this.prisma.slot.findFirst({
       where: { id: slotId, doctorId: doctor.id },
     });
@@ -85,15 +136,23 @@ export class SlotsService {
     });
   }
 
-  // 4. DELETE SLOT
   async remove(userId: number, slotId: number) {
     const doctor = await this.prisma.doctor.findUnique({ where: { userId } });
 
     const slot = await this.prisma.slot.findFirst({
       where: { id: slotId, doctorId: doctor.id },
+      include: { 
+        times: { 
+          where: { currentBookings: { gt: 0 } } 
+        } 
+      }
     });
 
     if (!slot) throw new NotFoundException('Slot not found');
+   
+    if (slot.times.length > 0) {
+      throw new BadRequestException('Cannot delete slot because patients have already booked appointments. Please cancel them first.');
+    }
 
     return this.prisma.slot.delete({
       where: { id: slotId },

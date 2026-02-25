@@ -15,49 +15,107 @@ model User {
   role      String   @default("PATIENT")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
-  doctor     Doctor?     @relation("UserDoctor")
-  patient    Patient?    @relation("UserPatient")
-  appointments Appointment[]
+  
+  // Relations
+  doctor    Doctor?  @relation("UserDoctor")
+  patient   Patient? @relation("UserPatient")
 
   @@map("users")
 }
 
-model Doctor {
-  id            Int      @id @default(autoincrement())
-  userId        Int      @unique
-  user          User     @relation("UserDoctor", fields: [userId], references: [id], onDelete: Cascade)
-  specialization String
-  experience    Int      // years
-  createdAt     DateTime @default(now())
-
-  appointments Appointment[]
-
-  @@map("doctors")
-}
-
 model Patient {
-  id          Int      @id @default(autoincrement())
-  userId      Int      @unique
-  user        User     @relation("UserPatient", fields: [userId], references: [id], onDelete: Cascade)
-  gender      String
-  createdAt   DateTime @default(now())
-
-  appointments Appointment[]
+  id           Int           @id @default(autoincrement())
+  userId       Int           @unique
+  user         User          @relation("UserPatient", fields: [userId], references: [id])
+  gender       String?
+  appointments Appointment[] @relation("PatientAppointments")
 
   @@map("patients")
 }
 
-model Appointment {
-  id          Int      @id @default(autoincrement())
-  doctorId    Int
-  patientId   Int
-  date        DateTime
-  status      String   @default("SCHEDULED") // SCHEDULED, COMPLETED, CANCELLED
-  createdAt   DateTime @default(now())
+model Doctor {
+  id              Int           @id @default(autoincrement())
+  userId          Int           @unique
+  user            User          @relation("UserDoctor", fields: [userId], references: [id])
+  specialization  String
+  experienceYears Int
+  ratings         Float         @default(0)
+  totalReviews    Int           @default(0)
+  isAvailable     Boolean       @default(true)
+  
+  // New Hybrid Scheduling Relations
+  slots           Slot[]
+  appointments    Appointment[]
 
-  doctor      Doctor   @relation(fields: [doctorId], references: [id])
-  patient     Patient  @relation(fields: [patientId], references: [id])
-
-  @@map("appointments")
+  @@map("doctors")
 }
+
+model Slot {
+  id             Int      @id @default(autoincrement())
+  doctorId       Int
+  doctor         Doctor   @relation(fields: [doctorId], references: [id])
+  
+  // Date Overrides & Scheduling
+  dayOfWeek      String?  
+  date           String?  // e.g., "2026-10-31"
+  startTime      String   // "09:00"
+  endTime        String   // "12:00"
+  
+  // Hybrid Settings
+  schedulingType String   @default("STREAM") // "STREAM" or "WAVE"
+  slotDuration   Int?     // e.g., 30
+  maxBookings    Int      @default(1) 
+  
+  times          Time[]   
+}
+
+model Time {
+  id              Int           @id @default(autoincrement())
+  time            String        // "09:00" or "09:00-11:00"
+  isBooked        Boolean       @default(false) 
+  
+  // Atomic Capacity Tracking
+  maxCapacity     Int           @default(1)
+  currentBookings Int           @default(0)
+  
+  slotId          Int
+  slot            Slot          @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  appointment     Appointment[]
+}
+
+model Appointment {
+  id            Int      @id @default(autoincrement())
+  
+  // Relation to Specific Time Chunk
+  timeId        Int?      
+  time          Time?    @relation(fields: [timeId], references: [id], onDelete: SetNull)
+  
+  // Users
+  patientId     Int
+  patient       Patient  @relation("PatientAppointments", fields: [patientId], references: [id])
+  doctorId      Int
+  doctor        Doctor   @relation(fields: [doctorId], references: [id])
+  
+  // Details
+  date          DateTime 
+  reportingTime DateTime
+  notes         String?
+  status        String   @default("CONFIRMED") // "CONFIRMED", "CANCELLED", "COMPLETED", "RESCHEDULED"
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  // Optional: If we implemented Rescheduling Logs in Week 3, uncomment this:
+  // logs       RescheduleLog[]
+}
+
+// Optional: For Week 3 Rescheduling Requirement
+// model RescheduleLog {
+//   id             Int      @id @default(autoincrement())
+//   appointmentId  Int
+//   appointment    Appointment @relation(fields: [appointmentId], references: [id])
+//   previousTimeId Int?
+//   previousDate   DateTime
+//   reason         String?
+//   createdAt      DateTime @default(now())
+// }
