@@ -5,7 +5,7 @@ import { PrismaService } from "src/prisma/prisma.service";
 @Injectable()
 
 export class DoctorService {
-    constructor(private readonly prisma: PrismaService) { }
+    constructor(private  prisma: PrismaService) { }
 
     async findAllDoctors(@Query('specialization') specialization?: string) {
         console.log("Finding doctors with specialization:", specialization);
@@ -22,36 +22,78 @@ export class DoctorService {
         });
     }
 
-    async getDoctorAvailability(doctorId: number, dateString: string) {
-        const searchDate = new Date(dateString);
-        const days = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
-        const dayOfWeek = days[searchDate.getDay()];
+  async getDoctorAvailability(doctorId: number, dateString: string) {
+    const searchDate = new Date(dateString);
+    const days = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
+    const dayOfWeek = days[searchDate.getDay()];
 
-        const slots = await this.prisma.slot.findMany({
-            where: {
-                doctorId: doctorId,
-                dayOfWeek: dayOfWeek
-            },
-            include: {
-                times: {
-                    where: { isBooked: false },
-                    orderBy: { time: 'asc' }
-                }
-            }
-        });
+    //Check for a Specific Date 
+    let slots = await this.prisma.slot.findMany({
+      where: { 
+        doctorId: doctorId, 
+        date: dateString 
+      },
+      include: { 
+        times: { 
+          orderBy: { time: 'asc' } 
+        } 
+      }
+    });
 
-        if (!slots || slots.length === 0) {
-            return { message: `Doctor is not working on ${dayOfWeek}s`, availableSlots: [] };
+    //use the Weekly Recurring Schedule
+    if (!slots || slots.length === 0) {
+      slots = await this.prisma.slot.findMany({
+        where: { 
+          doctorId: doctorId, 
+          dayOfWeek: dayOfWeek, 
+          date: null 
+        },
+        include: { 
+          times: { 
+            orderBy: { time: 'asc' } 
+          } 
         }
-
-        const availableTimes = slots.flatMap(slot => slot.times);
-
-        return {
-            doctor: doctorId,
-            date: dateString,
-            day: dayOfWeek,
-            totalFree: availableTimes.length,
-            availableSlots: availableTimes
-        };
+      });
     }
+
+    //If still no slots, the doctor is off that day.
+    if (!slots || slots.length === 0) {
+      return { 
+        message: `Doctor is not available on ${dateString} (${dayOfWeek}).`, 
+        availableSlots: [] 
+      };
+    }
+
+    const formattedSlots = slots.map(slot => {
+      const openTimes = slot.times.filter(t => t.currentBookings < t.maxCapacity);
+
+      return {
+        slotId: slot.id,
+        startTime: slot.startTime,
+        endTime: slot.endTime,
+        type: slot.schedulingType, 
+        
+        slotDuration: slot.schedulingType === 'WAVE' ? slot.slotDuration : null,
+
+        queueStats: slot.schedulingType === 'STREAM' ? {
+          totalCapacity: slot.maxBookings,
+          currentQueueLength: slot.times[0]?.currentBookings || 0,
+          spotsLeft: (slot.maxBookings - (slot.times[0]?.currentBookings || 0))
+        } : null,
+
+        availableTimes: openTimes.map(t => ({
+          timeId: t.id, 
+          time: t.time, 
+          isBooked: t.isBooked
+        }))
+      };
+    });
+
+    return {
+      doctorId,
+      date: dateString,
+      dayOfWeek,
+      slots: formattedSlots
+    };
+  }
 }

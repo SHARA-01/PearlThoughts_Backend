@@ -21,64 +21,66 @@ model User {
 }
 
 model Patient {
-  id          Int       @id @default(autoincrement())
-  userId      Int       @unique
-  user        User      @relation("UserPatient", fields: [userId], references: [id])
-  gender      String?
+  id           Int           @id @default(autoincrement())
+  userId       Int           @unique
+  user         User          @relation("UserPatient", fields: [userId], references: [id])
+  gender       String?
   appointments Appointment[] @relation("PatientAppointments")
   @@map("patients")
 }
 
 model Doctor {
-  id              Int       @id @default(autoincrement())
-  userId          Int       @unique
-  user            User      @relation("UserDoctor", fields: [userId], references: [id])
+  id              Int           @id @default(autoincrement())
+  userId          Int           @unique
+  user            User          @relation("UserDoctor", fields: [userId], references: [id])
   specialization  String
   experienceYears Int
-  ratings         Float     @default(0)
-  totalReviews    Int       @default(0)
-  isAvailable     Boolean   @default(true)
+  ratings         Float         @default(0)
+  totalReviews    Int           @default(0)
+  isAvailable     Boolean       @default(true)
   slots           Slot[]
   appointments    Appointment[]
 
   @@map("doctors")
 }
 
-
 model Slot {
-  id          Int      @id @default(autoincrement())
-  doctorId    Int
-  doctor      Doctor   @relation(fields: [doctorId], references: [id])
-  dayOfWeek   String   // "MONDAY"
-  startTime   String   // "09:00"
-  endTime     String   // "12:00"
-  maxBookings Int       @default(5)
-  times       Time[]   
+  id             Int      @id @default(autoincrement())
+  doctorId       Int
+  doctor         Doctor   @relation(fields: [doctorId], references: [id])
+  dayOfWeek      String?  
+  date           String?  // e.g., "2026-10-31"
+  startTime      String   // "09:00"
+  endTime        String   // "12:00"
+  schedulingType String   @default("STREAM") // "STREAM" or "WAVE"
+  slotDuration   Int?     // e.g., 30 (Required for WAVE, ignored for STREAM)
+  maxBookings    Int      @default(1) // Capacity per chunk (Wave) or Total Capacity (Stream)
+  times          Time[]   
 }
 
 model Time {
-  id          Int      @id @default(autoincrement())
-  time        String   // "09:00", "09:30"
-  isBooked    Boolean  @default(false) 
-  slotId      Int
-  slot        Slot     @relation(fields: [slotId], references: [id], onDelete: Cascade)
-  appointment Appointment[]
+  id              Int           @id @default(autoincrement())
+  time            String        // "09:00" (Wave) or "09:00-11:00" (Stream)
+  isBooked        Boolean       @default(false) 
+  maxCapacity     Int           @default(1)
+  currentBookings Int           @default(0)
+  slotId          Int
+  slot            Slot          @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  appointment     Appointment[]
 }
 
 model Appointment {
-  id          Int      @id @default(autoincrement())
-  timeId      Int?      
-  time        Time?    @relation(fields: [timeId], references: [id], onDelete: SetNull)
-  patientId   Int
-  patient     Patient  @relation("PatientAppointments", fields: [patientId], references: [id])
-  doctorId    Int
-  doctor      Doctor   @relation(fields: [doctorId], references: [id])
-  date        DateTime 
+  id            Int      @id @default(autoincrement())
+  timeId        Int?      
+  time          Time?    @relation(fields: [timeId], references: [id], onDelete: SetNull)
+  patientId     Int
+  patient       Patient  @relation("PatientAppointments", fields: [patientId], references: [id])
+  doctorId      Int
+  doctor        Doctor   @relation(fields: [doctorId], references: [id])
+  date          DateTime 
   reportingTime DateTime
-  notes       String?
-  status      String   @default("CONFIRMED") // "CONFIRMED", "CANCELLED", "COMPLETED"
-
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  notes         String?
+  status        String   @default("CONFIRMED") 
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
-

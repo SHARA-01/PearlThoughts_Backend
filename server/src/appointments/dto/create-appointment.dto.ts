@@ -5,13 +5,10 @@ export class CreateAppointmentDto {
   doctorId: number;
 
   @IsInt()
-  timeId: number;
+  timeId: number; 
 
   @IsDateString()
-  date: string;
-
-  @IsString()
-  time: string;
+  date: string; 
 
   @IsString()
   @IsOptional()

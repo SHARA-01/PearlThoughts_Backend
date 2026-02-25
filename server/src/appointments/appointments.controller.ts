@@ -13,12 +13,12 @@ export class AppointmentsController {
     return this.appointmentsService.create(req.user.userId, createAppointmentDto);
   }
 
-  @Get('my-appointments')
+  @Get('patient')
   findAll(@Request() req) {
     return this.appointmentsService.findAll(req.user.userId, req.user.role);
   }
 
-  @Get('doctor/schedule')
+  @Get('doctor')
   getDoctorSchedule(@Request() req) {
     if (req.user.role !== 'DOCTOR') {
       throw new BadRequestException('Only doctors can access the schedule');
