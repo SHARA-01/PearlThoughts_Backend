@@ -1,6 +1,7 @@
 import { Injectable, BadRequestException, NotFoundException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
+import { RescheduleAppointmentDto } from './dto/reschedule-appointment.dto';
 
 @Injectable()
 export class AppointmentsService {
@@ -175,4 +176,109 @@ export class AppointmentsService {
       return { message: 'Appointment cancelled and slot capacity restored.' };
     });
   }
+
+  async reschedule(userId: number, appointmentId: number, rescheduleDto: RescheduleAppointmentDto) {
+    const { newTimeId, newDate, reason } = rescheduleDto;
+
+    const appointment = await this.prisma.appointment.findUnique({
+      where: { id: appointmentId },
+      include: { 
+        patient: { select: { userId: true } },
+        time: true 
+      }
+    });
+
+    if (!appointment) throw new NotFoundException('Appointment not found');
+    
+    if (appointment.patient.userId !== userId) throw new ForbiddenException('Not your appointment');
+    if (appointment.status === 'CANCELLED') throw new BadRequestException('Cannot reschedule a cancelled appointment');
+
+    //Validate New Slot
+    const newTimeChunk = await this.prisma.time.findUnique({
+      where: { id: newTimeId },
+      include: { slot: true }
+    });
+
+    if (!newTimeChunk) throw new NotFoundException('New time slot not found');
+    if (newTimeChunk.slot.doctorId !== appointment.doctorId) {
+      throw new BadRequestException('You must reschedule with the same doctor.');
+    }
+
+    const requestedDateObj = new Date(newDate);
+    const dayNames = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
+    const requestedDayName = dayNames[requestedDateObj.getUTCDay()]; // Use UTC to avoid timezone shifts
+
+    // check slot A: Specific Date Slot (e.g. "2026-10-27")
+    if (newTimeChunk.slot.date) {
+      if (newTimeChunk.slot.date !== newDate) {
+        throw new BadRequestException(`This slot is only valid for ${newTimeChunk.slot.date}, not ${newDate}.`);
+      }
+    } 
+    // check slot B: Weekly Recurring Slot 
+    else if (newTimeChunk.slot.dayOfWeek) {
+      if (newTimeChunk.slot.dayOfWeek.toUpperCase() !== requestedDayName) {
+        throw new BadRequestException(`This slot is only valid for ${newTimeChunk.slot.dayOfWeek}s. You requested a ${requestedDayName}.`);
+      }
+    }
+
+    //handling new date & Reporting Time
+    const startTimeStr = newTimeChunk.time.split('-')[0];
+    const newAppointmentDate = new Date(`${newDate}T${startTimeStr}:00`);
+
+    if (newAppointmentDate < new Date()) throw new BadRequestException('Cannot reschedule to the past');
+
+    // Updating REPORTING TIME (10 mins prior)
+    const newReportingTime = new Date(newAppointmentDate);
+    newReportingTime.setMinutes(newReportingTime.getMinutes() - 10);
+
+    return this.prisma.$transaction(async (tx) => {
+      // remove from old slot (Decrement)
+      if (appointment.timeId) {
+        await tx.time.update({
+          where: { id: appointment.timeId },
+          data: { 
+            currentBookings: { decrement: 1 },
+            isBooked: false 
+          }
+        });
+      }
+
+      // adding in new slot
+      const updateResult = await tx.time.updateMany({
+        where: {
+          id: newTimeId,
+          currentBookings: { lt: newTimeChunk.maxCapacity } 
+        },
+        data: { currentBookings: { increment: 1 } }
+      });
+
+      if (updateResult.count === 0) {
+        throw new ConflictException('The new slot is fully booked. Reschedule failed.');
+      }
+
+      // C. Update Appointment with new time, date, reporting time, and set status to RESCHEDULED
+      const updatedAppt = await tx.appointment.update({
+        where: { id: appointmentId },
+        data: {
+          timeId: newTimeId,
+          date: newAppointmentDate,       
+          reportingTime: newReportingTime, 
+          status: 'RESCHEDULED'
+        }
+      });
+
+      // logging the reschedule action for audit purposes
+      await tx.rescheduleLog.create({
+        data: {
+          appointmentId: appointment.id,
+          previousTimeId: appointment.timeId,
+          previousDate: appointment.date,
+          reason: reason || 'Patient Request'
+        }
+      });
+
+      return updatedAppt;
+    });
+  }
+
 }

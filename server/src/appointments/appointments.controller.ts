@@ -2,6 +2,7 @@ import { Controller, Post, Get, Patch, Body, Param, ParseIntPipe, UseGuards, Req
 import { AppointmentsService } from './appointments.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RescheduleAppointmentDto } from './dto/reschedule-appointment.dto';
 
 @Controller('appointments')
 @UseGuards(JwtAuthGuard)
@@ -24,6 +25,18 @@ export class AppointmentsController {
       throw new BadRequestException('Only doctors can access the schedule');
     }
     return this.appointmentsService.findAll(req.user.userId, 'DOCTOR');
+  }
+
+  //! here is id is appointment id and not doctor id
+
+  @Patch(':id/reschedule')
+  @UseGuards(JwtAuthGuard)
+  async reschedule(
+    @Request() req,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() rescheduleDto: RescheduleAppointmentDto,
+  ) {
+    return this.appointmentsService.reschedule(req.user.userId, id, rescheduleDto);
   }
 
   @Patch(':id/cancel')
