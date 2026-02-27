@@ -5,30 +5,30 @@ import { UpdateSlotDto } from './dto/update-slot.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('slots')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard) 
 export class SlotsController {
-  constructor(private readonly slotsService: SlotsService) {}
+  constructor(private readonly slotsService: SlotsService) { }
 
   @Post()
   create(@Request() req, @Body() createSlotDto: CreateSlotDto) {
-    console.log('User from JWT:', req.user.userId);
     return this.slotsService.create(req.user.userId, createSlotDto);
   }
-  
+
   @Get()
   findMySlots(@Request() req) {
     return this.slotsService.findMySlots(req.user.userId);
   }
 
   @Patch(':id')
-  updateLimit(
-    @Request() req, 
-    @Param('id', ParseIntPipe) id: number, 
-    @Body() updateSlotDto: UpdateSlotDto
+  update(
+    @Request() req,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() updateDto: UpdateSlotDto
   ) {
-    return this.slotsService.updateSlotLimit(req.user.userId, id, updateSlotDto);
+    return this.slotsService.updateSlot(req.user.userId, id, updateDto);
   }
 
+  // 🗑️ SAFE DELETE
   @Delete(':id')
   remove(@Request() req, @Param('id', ParseIntPipe) id: number) {
     return this.slotsService.remove(req.user.userId, id);
